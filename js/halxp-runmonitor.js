@@ -15,13 +15,13 @@ app.registerExtension({
         let monitorBtn = null;
         let monitorDot = null;
 
-        // --- 1. CORE LOGIC: SYNC & UPDATE ---
+        // --- 1. CORE LOGIC: VISUALS ---
         
-        // Updates the visuals of the button (Green/Gray) based on state
-        function updateButtonVisuals(enabled) {
+        // Directly update the button based on the boolean passed to it
+        function updateButtonVisuals(isEnabled) {
             if (!monitorBtn || !monitorDot) return;
             
-            if (enabled) {
+            if (isEnabled) {
                 // ACTIVE STATE (Green)
                 monitorDot.style.backgroundColor = "#4CAF50"; 
                 monitorDot.style.boxShadow = "0 0 6px #4CAF50";
@@ -33,31 +33,28 @@ app.registerExtension({
                 monitorDot.style.backgroundColor = "#666"; 
                 monitorDot.style.boxShadow = "none";
                 monitorBtn.style.color = "var(--fg-color, #ccc)"; 
-                monitorBtn.style.borderColor = "#d3c1c1ff"; // Matches Focus default border
+                monitorBtn.style.borderColor = "#d3c1c1ff";
                 monitorBtn.title = "Monitor: OFF";
             }
         }
 
-        // Sends config to Python backend AND updates UI
-        function syncConfigToBackend() {
-            const enabled = app.ui.settings.getSettingValue(ID_ENABLE, false);
+        // --- 2. CORE LOGIC: BACKEND SYNC ---
+
+        function pushConfigToBackend() {
+            // We can safely read all values here for the Python backend
             const config = {
-                enabled: enabled,
+                enabled: app.ui.settings.getSettingValue(ID_ENABLE, false),
                 success_path: app.ui.settings.getSettingValue(ID_SUCCESS, ""),
                 error_path: app.ui.settings.getSettingValue(ID_ERROR, "")
             };
             
-            // 1. Update the UI Button immediately
-            updateButtonVisuals(enabled);
-
-            // 2. Send to Backend
             api.fetchApi("/halxp/update_config", {
                 method: "POST",
                 body: JSON.stringify(config)
             });
         }
 
-        // --- 2. REGISTER SETTINGS ---
+        // --- 3. REGISTER SETTINGS ---
         
         app.ui.settings.addSetting({
             id: ID_ENABLE,
@@ -66,7 +63,11 @@ app.registerExtension({
             defaultValue: false,
             category: ['HALXP-Comfy', 'Run Monitor', 'Enable'], 
             tooltip: "Enable to run scripts on workflow status change.",
-            onChange: syncConfigToBackend // Triggers when changed via Menu OR Button
+            onChange: (value) => {
+                // CRITICAL FIX: Use 'value' directly. Do not re-read from settings.
+                updateButtonVisuals(value);
+                pushConfigToBackend();
+            }
         });
 
         app.ui.settings.addSetting({
@@ -76,7 +77,7 @@ app.registerExtension({
             defaultValue: "",
             category: ['HALXP-Comfy', 'Run Monitor', 'Success'],
             tooltip: "Full path to a .bat/.sh to run on success.",
-            onChange: syncConfigToBackend
+            onChange: pushConfigToBackend
         });
 
         app.ui.settings.addSetting({
@@ -86,17 +87,16 @@ app.registerExtension({
             defaultValue: "",
             category: ['HALXP-Comfy', 'Run Monitor', 'Error'],
             tooltip: "Full path to a .bat/.sh to run on error.",
-            onChange: syncConfigToBackend
+            onChange: pushConfigToBackend
         });
 
-        // --- 3. UI BUTTON CREATION (Copied from Focus) ---
+        // --- 4. UI BUTTON CREATION ---
 
         function createButton() {
             const btn = document.createElement("button");
             btn.textContent = "Monitor";
             btn.id = "halxp-monitor-btn"; 
             
-            // EXACT STYLE COPY FROM FOCUS.JS
             btn.style.cssText = `
                 position: relative; display: inline-flex; align-items: center; justify-content: center;
                 padding: 0 10px; margin: 0 4px; background-color: var(--comfy-input-bg, #333);
@@ -106,14 +106,14 @@ app.registerExtension({
                 border: 1px solid #d3c1c1ff; 
             `;
 
-            // Create the Status Dot
             const d = document.createElement("span");
             d.style.cssText = `width: 8px; height: 8px; border-radius: 50%; background-color: #666; margin-right: 8px; display: inline-block; flex-shrink: 0;`;
             
             btn.prepend(d);
             monitorDot = d;
 
-            // Handle Click: Toggle the setting (which triggers onChange -> syncConfigToBackend)
+            // CLICK HANDLER: 
+            // We simply toggle the setting. The setting's onChange will handle the visuals.
             btn.onclick = (e) => { 
                 e.preventDefault(); 
                 e.stopPropagation(); 
@@ -125,42 +125,38 @@ app.registerExtension({
         }
 
         function injectButton() {
-            // Prevent duplicates
             if (document.getElementById("halxp-monitor-btn")) return;
 
-            // Find the "Manager" button or any existing button to latch onto
             const allButtons = Array.from(document.querySelectorAll("button"));
             const targetBtn = allButtons.find(b => {
                 if (!b.offsetParent) return false;
                 const text = b.innerText.trim();
-                // Try to place it near Manager, or Focus if it loaded first
                 return text === "Manager" || text === "ComfyUI Manager" || text === "Focus";
             });
 
             if (targetBtn && targetBtn.parentNode) {
                 monitorBtn = createButton();
                 
-                // Match height of the neighbor
                 const h = targetBtn.offsetHeight;
                 monitorBtn.style.height = h > 0 ? `${h}px` : "28px";
 
-                // Insert BEFORE the target (Standardizes menu flow)
-                // If you want it specifically AFTER Focus but BEFORE Manager, this generally works 
-                // because extensions load in order.
                 targetBtn.parentNode.insertBefore(monitorBtn, targetBtn);
                 
-                // Set initial visual state
-                const isEnabled = app.ui.settings.getSettingValue(ID_ENABLE, false);
-                updateButtonVisuals(isEnabled);
+                // INITIAL SYNC: Read from memory once on creation
+                const currentVal = app.ui.settings.getSettingValue(ID_ENABLE, false);
+                updateButtonVisuals(currentVal);
             }
         }
 
-        // --- 4. INITIALIZATION ---
+        // --- 5. INITIALIZATION ---
         
-        // Attempt to inject button periodically until UI is ready
         setInterval(injectButton, 500);
 
-        // Sync backend on load (wait slightly for settings to load)
-        setTimeout(syncConfigToBackend, 1000);
+        // Safety Sync on load
+        setTimeout(() => {
+            const currentVal = app.ui.settings.getSettingValue(ID_ENABLE, false);
+            updateButtonVisuals(currentVal);
+            pushConfigToBackend();
+        }, 2000);
     }
 });

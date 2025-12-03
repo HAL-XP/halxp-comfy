@@ -5,6 +5,7 @@
 **HALXP-Comfy** is a professional UX suite for ComfyUI designed to enhance workflow management.
 
 ![App Screenshot](./assets/button.previews.png)
+![App Screenshot](./assets/settings.previews.png)
 
 This extension is the starting point for a growing collection of tools. Currently, it features **HALXP Focus**, a way to auto-focus the current running node and , **HALXP RunMonitor** taht lets you run a script on success or error with more enhancements currently in development.
 
