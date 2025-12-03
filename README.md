@@ -2,9 +2,9 @@
 
 ![Version](https://img.shields.io/badge/version-1.0.0-blue) ![ComfyUI](https://img.shields.io/badge/ComfyUI-Compatible-green)
 
-**HALXP-Comfy** (High Availability & Layout eXtension Pack) is a professional UI suite for ComfyUI designed to enhance workflow management.
+**HALXP-Comfy** is a professional UX suite for ComfyUI designed to enhance workflow management.
 
-This extension is the starting point for a growing collection of UI tools. Currently, it features **HALXP Focus**, a smart navigation utility, with more enhancements currently in development.
+This extension is the starting point for a growing collection of tools. Currently, it features **HALXP Focus**, a way to auto-focus the current running node and , **HALXP RunMonitor** taht lets you run a script on success or error with more enhancements currently in development.
 
 **Verified working on:** Legacy UI, ComfyUI V1 (Nodes 2.0), and Portable Distributions.
 
@@ -21,7 +21,18 @@ A smart "Focus" button injected into your main menu bar.
 * **Visual Feedback:** Features a status indicator (Green dot = Active) so you always know when auto-follow is engaged.
 * **V1 Compatible:** Works natively with the new Vue.js frontend and PrimeVue menus.
 
-### 2. More Coming Soon
+### 2. HALXP RunMonitor
+A way to run a custom script on workflow success or failure
+* Go in the Settings under HALXP-Comfy and set a batch file to run or anything you want 
+* (play a wav, open a website, etc.) separately for sucess and errors - doesn't cover static validation on launch
+* ex: With my phone provider (Free Mobile in France), I have an API to send SMS so I can go do other things and get notified when my workflow ends
+* batch file content example: 
+* start "" "https://smsapi.free-mobile.fr/sendmsg?user=XXXXXXXXXX&pass=YYYYYYYYYYY&msg=Comfy%%20Error%%20!"
+* **Smart Docking:** Automatically detects the ComfyUI Manager button and injects itself seamlessly beside it.
+* **Visual Feedback:** Features a status indicator (Green dot = Active) so you always know when Monitor is engaged.
+* **V1 Compatible:** Works natively with the new Vue.js frontend and PrimeVue menus.
+
+### 3. More Coming Soon
 HALXP is built as a modular suite. Expect future updates to include additional layout and debugging tools to further improve your ComfyUI experience.
 
 ## 📦 Installation
@@ -35,4 +46,4 @@ HALXP is built as a modular suite. Expect future updates to include additional l
 1. Navigate to your `ComfyUI/custom_nodes/` directory.
 2. Clone this repository:
    ```bash
-   git clone [https://github.com/HAL-XP/halxp-comfy](https://github.com/HAL-XP/halxp-comfy)
+   git clone [https://github.com/YOUR_USERNAME/halxp-comfyui](https://github.com/YOUR_USERNAME/halxp-comfyui)
