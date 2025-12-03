@@ -7,6 +7,7 @@ app.registerExtension({
         console.log("[HALXP-RunMonitor] Initializing...");
 
         // --- CONSTANTS ---
+        const ID_DISPLAY = "HALXP.RunMonitor.DisplayButton";
         const ID_ENABLE  = "HALXP.RunMonitor.Enable";
         const ID_SUCCESS = "HALXP.RunMonitor.SuccessPath";
         const ID_ERROR   = "HALXP.RunMonitor.ErrorPath";
@@ -15,21 +16,19 @@ app.registerExtension({
         let monitorBtn = null;
         let monitorDot = null;
 
-        // --- 1. CORE LOGIC: VISUALS ---
+        // --- 1. CORE LOGIC ---
         
-        // Directly update the button based on the boolean passed to it
         function updateButtonVisuals(isEnabled) {
             if (!monitorBtn || !monitorDot) return;
-            
             if (isEnabled) {
-                // ACTIVE STATE (Green)
+                // Green (ON)
                 monitorDot.style.backgroundColor = "#4CAF50"; 
                 monitorDot.style.boxShadow = "0 0 6px #4CAF50";
                 monitorBtn.style.color = "#fff"; 
                 monitorBtn.style.borderColor = "#4CAF50";
                 monitorBtn.title = "Monitor: ON";
             } else {
-                // INACTIVE STATE (Gray/Default)
+                // Gray (OFF)
                 monitorDot.style.backgroundColor = "#666"; 
                 monitorDot.style.boxShadow = "none";
                 monitorBtn.style.color = "var(--fg-color, #ccc)"; 
@@ -38,65 +37,44 @@ app.registerExtension({
             }
         }
 
-        // --- 2. CORE LOGIC: BACKEND SYNC ---
+        // UPDATED: Now accepts an optional override for the enabled state
+        function pushConfigToBackend(enabledOverride) {
+            // If an override is provided (from onChange), use it.
+            // Otherwise, fall back to reading the setting (for init/manual calls).
+            let isEnabled;
+            if (enabledOverride !== undefined && enabledOverride !== null) {
+                isEnabled = enabledOverride;
+            } else {
+                isEnabled = app.ui.settings.getSettingValue(ID_ENABLE, false);
+            }
 
-        function pushConfigToBackend() {
-            // We can safely read all values here for the Python backend
             const config = {
-                enabled: app.ui.settings.getSettingValue(ID_ENABLE, false),
+                enabled: isEnabled,
                 success_path: app.ui.settings.getSettingValue(ID_SUCCESS, ""),
                 error_path: app.ui.settings.getSettingValue(ID_ERROR, "")
             };
             
+            // Send to Python
             api.fetchApi("/halxp/update_config", {
                 method: "POST",
                 body: JSON.stringify(config)
             });
         }
 
-        // --- 3. REGISTER SETTINGS ---
-        
-        app.ui.settings.addSetting({
-            id: ID_ENABLE,
-            name: "Enable External Monitoring",
-            type: "boolean",
-            defaultValue: false,
-            category: ['HALXP-Comfy', 'Run Monitor', 'Enable'], 
-            tooltip: "Enable to run scripts on workflow status change.",
-            onChange: (value) => {
-                // CRITICAL FIX: Use 'value' directly. Do not re-read from settings.
-                updateButtonVisuals(value);
-                pushConfigToBackend();
+        // --- 2. UI HELPERS ---
+
+        function removeButton() {
+            if (monitorBtn) {
+                monitorBtn.remove();
+                monitorBtn = null;
+                monitorDot = null;
             }
-        });
-
-        app.ui.settings.addSetting({
-            id: ID_SUCCESS,
-            name: "Success Command Path",
-            type: "text",
-            defaultValue: "",
-            category: ['HALXP-Comfy', 'Run Monitor', 'Success'],
-            tooltip: "Full path to a .bat/.sh to run on success.",
-            onChange: pushConfigToBackend
-        });
-
-        app.ui.settings.addSetting({
-            id: ID_ERROR,
-            name: "Error Command Path",
-            type: "text",
-            defaultValue: "",
-            category: ['HALXP-Comfy', 'Run Monitor', 'Error'],
-            tooltip: "Full path to a .bat/.sh to run on error.",
-            onChange: pushConfigToBackend
-        });
-
-        // --- 4. UI BUTTON CREATION ---
+        }
 
         function createButton() {
             const btn = document.createElement("button");
             btn.textContent = "Monitor";
             btn.id = "halxp-monitor-btn"; 
-            
             btn.style.cssText = `
                 position: relative; display: inline-flex; align-items: center; justify-content: center;
                 padding: 0 10px; margin: 0 4px; background-color: var(--comfy-input-bg, #333);
@@ -105,26 +83,23 @@ app.registerExtension({
                 font-weight: 600; flex-shrink: 0; white-space: nowrap; z-index: 9999; pointer-events: auto;
                 border: 1px solid #d3c1c1ff; 
             `;
-
             const d = document.createElement("span");
             d.style.cssText = `width: 8px; height: 8px; border-radius: 50%; background-color: #666; margin-right: 8px; display: inline-block; flex-shrink: 0;`;
-            
             btn.prepend(d);
             monitorDot = d;
 
-            // CLICK HANDLER: 
-            // We simply toggle the setting. The setting's onChange will handle the visuals.
             btn.onclick = (e) => { 
                 e.preventDefault(); 
                 e.stopPropagation(); 
                 const current = app.ui.settings.getSettingValue(ID_ENABLE, false);
                 app.ui.settings.setSettingValue(ID_ENABLE, !current);
             };
-
             return btn;
         }
 
         function injectButton() {
+            const shouldDisplay = app.ui.settings.getSettingValue(ID_DISPLAY, true);
+            if (!shouldDisplay) { removeButton(); return; }
             if (document.getElementById("halxp-monitor-btn")) return;
 
             const allButtons = Array.from(document.querySelectorAll("button"));
@@ -136,27 +111,56 @@ app.registerExtension({
 
             if (targetBtn && targetBtn.parentNode) {
                 monitorBtn = createButton();
-                
                 const h = targetBtn.offsetHeight;
                 monitorBtn.style.height = h > 0 ? `${h}px` : "28px";
-
                 targetBtn.parentNode.insertBefore(monitorBtn, targetBtn);
                 
-                // INITIAL SYNC: Read from memory once on creation
-                const currentVal = app.ui.settings.getSettingValue(ID_ENABLE, false);
-                updateButtonVisuals(currentVal);
+                // Visual Sync
+                updateButtonVisuals(app.ui.settings.getSettingValue(ID_ENABLE, false));
             }
         }
 
-        // --- 5. INITIALIZATION ---
+        // --- 3. REGISTER SETTINGS ---
+
+        app.ui.settings.addSetting({
+            id: ID_DISPLAY, name: "Display Monitor Button", type: "boolean", defaultValue: true,
+            category: ['HALXP-Comfy', 'Run Monitor', 'Display'],
+            onChange: (value) => { value ? injectButton() : removeButton(); }
+        });
+        
+        app.ui.settings.addSetting({
+            id: ID_ENABLE, name: "Enable External Monitoring", type: "boolean", defaultValue: false,
+            category: ['HALXP-Comfy', 'Run Monitor', 'Enable'], 
+            onChange: (value) => { 
+                updateButtonVisuals(value); 
+                // PASS VALUE DIRECTLY HERE to prevent race condition
+                pushConfigToBackend(value); 
+            }
+        });
+
+        app.ui.settings.addSetting({
+            id: ID_SUCCESS, name: "Success Command Path", type: "text", defaultValue: "",
+            category: ['HALXP-Comfy', 'Run Monitor', 'Success'], 
+            // We pass undefined here so it reads from settings, as string updates are usually slower/safer
+            onChange: () => pushConfigToBackend() 
+        });
+
+        app.ui.settings.addSetting({
+            id: ID_ERROR, name: "Error Command Path", type: "text", defaultValue: "",
+            category: ['HALXP-Comfy', 'Run Monitor', 'Error'], 
+            onChange: () => pushConfigToBackend()
+        });
+
+        // --- 4. INITIALIZATION ---
         
         setInterval(injectButton, 500);
 
-        // Safety Sync on load
+        // --- FORCE SYNC ON LOAD ---
         setTimeout(() => {
-            const currentVal = app.ui.settings.getSettingValue(ID_ENABLE, false);
-            updateButtonVisuals(currentVal);
-            pushConfigToBackend();
-        }, 2000);
+             const isEnabled = app.ui.settings.getSettingValue(ID_ENABLE, false);
+             updateButtonVisuals(isEnabled);
+             pushConfigToBackend(isEnabled); // Pass explicit value
+             console.log("[HALXP-RunMonitor] Force-synced config to backend.");
+        }, 100);
     }
 });

@@ -11,7 +11,8 @@ halxp_config = {
 }
 
 # --- STATE TRACKING ---
-run_has_error = False
+# We store the ID of the prompt that just failed.
+last_failed_prompt_id = None
 
 # --- 1. API ROUTE ---
 @server.PromptServer.instance.routes.post("/halxp/update_config")
@@ -19,6 +20,8 @@ async def update_halxp_config(request):
     try:
         data = await request.json()
         halxp_config.update(data)
+        # Debug Log to confirm settings are received
+        print(f"[HALXP-Core] Settings Updated: Enabled={halxp_config['enabled']}")
         return web.json_response({"status": "ok"})
     except Exception as e:
         print(f"[HALXP-Core] Error updating config: {e}")
@@ -28,7 +31,7 @@ async def update_halxp_config(request):
 original_send_json = server.PromptServer.instance.send_json
 
 async def intercepted_send_json(self, event, data, sid=None):
-    global run_has_error
+    global last_failed_prompt_id
     
     # 1. Execute Original Behavior
     await original_send_json(event, data, sid)
@@ -36,39 +39,37 @@ async def intercepted_send_json(self, event, data, sid=None):
     # 2. Check RunMonitor Logic
     if halxp_config.get("enabled"):
         try:
-            # --- START: SAFETY RESET ---
-            # Just in case the last run didn't clear the flag, we clear it on start too.
-            if event == "execution_start":
-                run_has_error = False
-
             # --- DETECT ERROR ---
-            elif event == "execution_error":
-                run_has_error = True
+            if event == "execution_error":
+                # Record which prompt ID failed
+                current_id = data.get("prompt_id")
+                last_failed_prompt_id = current_id
+                
+                print(f"[HALXP-Monitor] ❌ Error detected for Prompt ID: {current_id}")
+                
                 cmd = halxp_config.get("error_path")
                 if cmd and cmd.strip():
-                    print(f"[HALXP-RunMonitor] ❌ Workflow Error. Running: {cmd}")
+                    print(f"[HALXP-Monitor] 🚀 Running Error Script...")
                     subprocess.Popen(cmd, shell=True)
 
-            # --- DETECT FINISH (SUCCESS or FAIL) ---
-            # 'executing' with node=None means the prompt is done.
+            # --- DETECT FINISH ---
+            # 'executing' with node=None means the prompt is fully done
             elif event == "executing" and data.get("node") is None:
+                finished_id = data.get("prompt_id")
                 
-                # Only run success script if NO error occurred
-                if not run_has_error:
+                # LOGIC: Only run success if this ID is NOT the one that just failed
+                if finished_id != last_failed_prompt_id:
                     cmd = halxp_config.get("success_path")
                     if cmd and cmd.strip():
-                        print(f"[HALXP-RunMonitor] ✅ Workflow Finished. Running: {cmd}")
+                        print(f"[HALXP-Monitor] ✅ Workflow Finished (Success). Running Script...")
                         subprocess.Popen(cmd, shell=True)
-                
-                # --- CRITICAL FIX: ALWAYS RESET STATE HERE ---
-                # Once the run is finished, we must clear the error flag 
-                # so the NEXT run starts fresh.
-                if run_has_error:
-                    print(f"[HALXP-RunMonitor] 🔄 Run finished with errors. Resetting state for next run.")
-                    run_has_error = False
+                    else:
+                        print(f"[HALXP-Monitor] ✅ Workflow Finished, but no Success Path configured.")
+                else:
+                    print(f"[HALXP-Monitor] ℹ️ Workflow Finished, but skipping Success Script (This was the failed run).")
 
         except Exception as e:
-            print(f"[HALXP-RunMonitor] ⚠️ Failed to execute monitoring script: {e}")
+            print(f"[HALXP-Monitor] ⚠️ Script Execution Failed: {e}")
 
 # Apply the hook
 server.PromptServer.instance.send_json = intercepted_send_json.__get__(server.PromptServer.instance, server.PromptServer)
