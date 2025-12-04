@@ -1,6 +1,6 @@
 # HALXP-Comfy (ComfyUI Extension)
 
-![Version](https://img.shields.io/badge/version-1.0.0-blue) ![ComfyUI](https://img.shields.io/badge/ComfyUI-Compatible-green)
+![Version](https://img.shields.io/badge/version-1.0.2-blue) ![ComfyUI](https://img.shields.io/badge/ComfyUI-Compatible-green)
 
 **HALXP-Comfy** is a professional UX suite for ComfyUI designed to enhance workflow management.
 
