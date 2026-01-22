@@ -28,7 +28,7 @@ Documentation = "https://github.com/HAL-XP/halxp-comfy/wiki"
 "Bug Tracker" = "https://github.com/HAL-XP/halxp-comfy/issues"
 
 [tool.comfy]
-PublisherId = ""
+PublisherId = "halxp"
 DisplayName = "halxp-comfy"
 Icon = ""
 includes = [] 
